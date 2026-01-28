@@ -43,3 +43,6 @@ prisma/migrations/
 
 # OS
 Thumbs.db
+
+.vercel
+.env*.local
