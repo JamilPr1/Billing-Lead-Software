@@ -4,11 +4,13 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-if (!process.env.DATABASE_URL) {
+// Support both PRISMA_DATABASE_URL (Accelerate) and DATABASE_URL (standard)
+const databaseUrl = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!databaseUrl) {
   throw new Error(
-    'DATABASE_URL environment variable is not set. ' +
-    'Please set up a database in Vercel (Storage → Create Database → Postgres) ' +
-    'and ensure DATABASE_URL is configured in your environment variables.'
+    'Database URL not found. Please set either PRISMA_DATABASE_URL or DATABASE_URL ' +
+    'environment variable in Vercel (Settings → Environment Variables).'
   );
 }
 
