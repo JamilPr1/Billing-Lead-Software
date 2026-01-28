@@ -45,29 +45,26 @@ git commit -m "Migrate to PostgreSQL for Vercel deployment"
 git push
 ```
 
-### Step 5: Run Database Migration
+### Step 5: Initialize Database Schema
 
-After Vercel redeploys:
+After Vercel redeploys with the new code:
 
-1. **Option A: Via Vercel Dashboard**
-   - Go to your deployment
-   - Open the function logs
-   - The build should run `prisma generate` automatically
+**Option A: Via API Endpoint (Easiest)**
+1. Visit: `https://your-app.vercel.app/api/migrate`
+2. This will test the database connection
+3. If successful, the schema will be created automatically on first API call
 
-2. **Option B: Via Vercel CLI** (Recommended)
-   ```bash
-   npm i -g vercel
-   vercel login
-   vercel env pull  # Pull environment variables
-   npx prisma migrate dev --name init
-   npx prisma db push
-   ```
+**Option B: Via Vercel CLI** (Recommended for initial setup)
+```bash
+npm i -g vercel
+vercel login
+vercel link  # Link to your project
+vercel env pull  # Pull environment variables to .env.local
+npx prisma db push  # Push schema to database
+```
 
-3. **Option C: One-time Migration Script**
-   Create a temporary API route to run migration:
-   - Create `src/app/api/migrate/route.ts` (see below)
-   - Visit `https://your-app.vercel.app/api/migrate` once
-   - Delete the route after migration
+**Option C: Manual Migration**
+The database tables will be created automatically when you first use the app (sync or view leads), as Prisma will create them on-demand.
 
 ### Step 6: Verify
 
