@@ -64,14 +64,69 @@ npm run dev
 
 ### Vercel Deployment
 
-1. Push your code to GitHub
-2. Import your repository in [Vercel](https://vercel.com)
-3. Vercel will automatically detect Next.js and configure the build
-4. Add build command: `npm run build`
-5. Add environment variables if needed
-6. Deploy!
+#### Quick Deploy
 
-**Note**: For production, consider migrating from SQLite to a cloud database (PostgreSQL, MySQL) as SQLite has limitations on serverless platforms like Vercel.
+1. **Push to GitHub** (Already done ✅)
+   - Repository: https://github.com/JamilPr1/Billing-Lead-Software
+
+2. **Deploy on Vercel**:
+   - Go to [vercel.com](https://vercel.com) and sign in
+   - Click "Add New Project"
+   - Import the repository: `JamilPr1/Billing-Lead-Software`
+   - Vercel will auto-detect Next.js settings
+   - Click "Deploy"
+
+3. **Build Settings** (Auto-configured):
+   - Framework Preset: Next.js
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+   - Install Command: `npm install`
+
+4. **Environment Variables** (if needed):
+   - No environment variables required for basic setup
+
+5. **Post-Deploy**:
+   - After deployment, run database migrations:
+   ```bash
+   # In Vercel deployment logs or via CLI
+   npx prisma generate
+   npx prisma db push
+   ```
+
+#### ⚠️ Important: Database Considerations
+
+**SQLite Limitation**: SQLite uses file-based storage which doesn't persist well on Vercel's serverless platform. Each serverless function gets a fresh filesystem.
+
+**Recommended Solutions**:
+
+1. **Use Vercel Postgres** (Recommended):
+   - Add Vercel Postgres in your Vercel dashboard
+   - Update `prisma/schema.prisma`:
+   ```prisma
+   datasource db {
+     provider = "postgresql"
+     url      = env("POSTGRES_PRISMA_URL")
+   }
+   ```
+   - Run migrations: `npx prisma migrate deploy`
+
+2. **Use Other Cloud Databases**:
+   - **Supabase** (Free tier available)
+   - **PlanetScale** (MySQL)
+   - **Neon** (PostgreSQL)
+   - **Railway** (PostgreSQL)
+
+3. **For Development/Testing**:
+   - SQLite works fine locally
+   - Consider using Vercel's preview deployments for testing
+
+#### Manual Deployment via Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login
+vercel
+```
 
 ## Project Structure
 
