@@ -43,13 +43,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get all provider IDs
-    const providerIds = providers.map(p => p.id);
+    // Get all provider IDs from the fetched providers
+    const allProviderIds = providers.map(p => p.id);
     
     // Fetch all existing leads in one query
     const existingLeads = await db.lead.findMany({
       where: {
-        providerId: { in: providerIds },
+        providerId: { in: allProviderIds },
       },
       select: { providerId: true },
     });
