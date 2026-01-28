@@ -68,13 +68,16 @@ export async function POST(request: NextRequest) {
     if (resumeFromLastPosition) {
       try {
         // Check if SyncProgress table exists (might not exist until migration runs)
-        // @ts-ignore - SyncProgress model may not be in Prisma client yet
-        const syncProgress = await db.syncProgress?.findUnique({
-          where: { searchKey },
-        });
-        if (syncProgress) {
-          startFromSkip = syncProgress.lastFetchedSkip;
-          console.log(`Resuming from position ${startFromSkip} for search key: ${searchKey}`);
+        // Type assertion needed because Prisma client may not have SyncProgress yet
+        const dbAny = db as any;
+        if (dbAny.syncProgress) {
+          const syncProgress = await dbAny.syncProgress.findUnique({
+            where: { searchKey },
+          });
+          if (syncProgress) {
+            startFromSkip = syncProgress.lastFetchedSkip;
+            console.log(`Resuming from position ${startFromSkip} for search key: ${searchKey}`);
+          }
         }
       } catch (error: any) {
         // Table doesn't exist yet - that's okay, start from beginning
@@ -266,10 +269,10 @@ export async function POST(request: NextRequest) {
 
     // Update sync progress (gracefully handle if table doesn't exist yet)
     try {
-      // @ts-ignore - SyncProgress model may not be in Prisma client yet
-      if (db.syncProgress) {
-        // @ts-ignore
-        await db.syncProgress.upsert({
+      // Type assertion needed because Prisma client may not have SyncProgress yet
+      const dbAny = db as any;
+      if (dbAny.syncProgress) {
+        await dbAny.syncProgress.upsert({
           where: { searchKey },
           create: {
             searchKey,
