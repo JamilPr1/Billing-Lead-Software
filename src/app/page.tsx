@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import ProviderList from '@/components/ProviderList';
 import SyncButton from '@/components/SyncButton';
+import FileUpload from '@/components/FileUpload';
 
 export default function Home() {
   return (
@@ -18,11 +19,14 @@ export default function Home() {
       <main className="container">
         <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <SyncButton />
-          <Link href="/leads" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-            View Saved Leads
-          </Link>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <FileUpload />
+            <Link href="/leads" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+              View Saved Leads
+            </Link>
+          </div>
         </div>
-        <ProviderList />
+        <ProviderList showOnlyLatest={true} />
       </main>
     </div>
   );

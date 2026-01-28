@@ -15,14 +15,18 @@
   },
   "dependencies": {
     "@prisma/client": "^5.7.1",
-    "next": "14.0.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "adm-zip": "^0.5.16",
     "axios": "^1.6.2",
-    "date-fns": "^3.0.6"
+    "date-fns": "^3.0.6",
+    "next": "14.0.4",
+    "papaparse": "^5.5.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.10.5",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "prisma": "^5.7.1",

@@ -9,10 +9,17 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const status = searchParams.get('status');
+    const latestOnly = searchParams.get('latestOnly') === 'true'; // Show only providers without saved leads
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status) {
+    
+    if (latestOnly) {
+      // Show only providers that don't have any saved leads
+      where.leads = {
+        none: {}, // No leads exist for this provider
+      };
+    } else if (status) {
       where.leads = {
         some: {
           status: status,

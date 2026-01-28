@@ -24,7 +24,11 @@ interface Provider {
   }>;
 }
 
-export default function ProviderList() {
+interface ProviderListProps {
+  showOnlyLatest?: boolean; // Show only providers without saved leads (latest fetched)
+}
+
+export default function ProviderList({ showOnlyLatest = false }: ProviderListProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -36,7 +40,10 @@ export default function ProviderList() {
   const fetchProviders = async (pageNum: number = 1) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/providers?page=${pageNum}&limit=50`);
+      const url = showOnlyLatest 
+        ? `/api/providers?page=${pageNum}&limit=50&latestOnly=true`
+        : `/api/providers?page=${pageNum}&limit=50`;
+      const response = await fetch(url);
       const data = await response.json();
       setProviders(data.providers || []);
       setTotalPages(data.pagination?.totalPages || 1);
@@ -86,7 +93,12 @@ export default function ProviderList() {
     <div>
       <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2>Providers ({total})</h2>
+          <h2>{showOnlyLatest ? 'Latest Fetched Providers' : 'Providers'} ({total})</h2>
+          {showOnlyLatest && (
+            <p style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: '#666' }}>
+              Showing only providers without saved leads. View all saved leads on the Saved Leads page.
+            </p>
+          )}
           {saveMessage && (
             <p style={{ marginTop: '0.5rem', color: saveMessage.includes('Error') ? '#d32f2f' : '#388e3c', fontSize: '0.875rem' }}>
               {saveMessage}
