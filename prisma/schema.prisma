@@ -51,3 +51,15 @@ model Lead {
   @@index([providerId, status])
   @@index([updatedAt])
 }
+
+model SyncProgress {
+  id                String   @id @default(cuid())
+  searchKey         String   @unique // Unique key based on search criteria (e.g., "taxonomy:Internal Medicine")
+  lastFetchedSkip   Int      @default(0) // Last skip position fetched
+  totalFetched      Int      @default(0) // Total records fetched so far
+  totalAvailable    Int?     // Total available records from API
+  lastSyncedAt      DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  
+  @@index([searchKey])
+}

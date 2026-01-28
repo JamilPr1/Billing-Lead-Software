@@ -77,8 +77,10 @@ export default function SyncButton() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             enumeration_type: 'NPI-1',
-            limit: 200,
             taxonomy_description: specialtySearch,
+            createLeadsForExisting: createLeadsForExisting,
+            fetchAll: true, // Fetch ALL records (unlimited)
+            resumeFromLastPosition: true, // Resume from last position
           }),
         });
 
@@ -89,6 +91,9 @@ export default function SyncButton() {
           const updated = data.updated || 0;
           const processed = data.total || 0;
           const leadsCreated = data.leadsCreated || added; // Each new provider gets 1 lead
+          const totalAvailable = data.totalAvailable || 0;
+          const lastFetchedSkip = data.lastFetchedSkip || 0;
+          const isComplete = data.isComplete || false;
           
           totalAdded += added;
           totalUpdated += updated;
@@ -103,8 +108,14 @@ export default function SyncButton() {
             providersAdded: totalAdded,
             providersUpdated: totalUpdated,
             leadsCreated: totalLeadsCreated,
-            status: 'complete',
+            status: isComplete ? 'complete' : 'processing',
           });
+          
+          // Show progress message if not complete
+          if (!isComplete && totalAvailable > 0) {
+            const progressPercent = Math.round((lastFetchedSkip / totalAvailable) * 100);
+            setMessage(`${specialtyLabel}: ${progressPercent}% complete (${lastFetchedSkip.toLocaleString()}/${totalAvailable.toLocaleString()} records)`);
+          }
         } else {
           setMessage(`Error syncing ${specialtyLabel}: ${data.error}`);
         }
@@ -113,7 +124,7 @@ export default function SyncButton() {
       setProgress(null);
 
       if (totalProcessed > 0) {
-        setMessage(`✅ Sync completed! Fetched: ${totalProcessed} providers | Added: ${totalAdded} (${totalLeadsCreated} leads created) | Updated: ${totalUpdated}`);
+        setMessage(`✅ Sync completed! Fetched: ${totalProcessed.toLocaleString()} providers | Added: ${totalAdded.toLocaleString()} (${totalLeadsCreated.toLocaleString()} leads created) | Updated: ${totalUpdated.toLocaleString()}`);
         setTimeout(() => window.location.reload(), 3000);
       } else {
         setMessage('No providers found. Try different specialties or search criteria.');

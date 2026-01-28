@@ -4,16 +4,37 @@ import { fetchAllProviders } from '@/lib/nppes-api';
 
 export const dynamic = 'force-dynamic';
 
+// Helper function to generate unique search key
+function generateSearchKey(searchParams: any): string {
+  const parts: string[] = [];
+  if (searchParams.taxonomy_description) parts.push(`taxonomy:${searchParams.taxonomy_description}`);
+  if (searchParams.state) parts.push(`state:${searchParams.state}`);
+  if (searchParams.city) parts.push(`city:${searchParams.city}`);
+  if (searchParams.last_name) parts.push(`last_name:${searchParams.last_name}`);
+  if (searchParams.enumeration_type) parts.push(`enum:${searchParams.enumeration_type}`);
+  return parts.join('|') || 'default';
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { enumeration_type = 'NPI-1', state, city, last_name, taxonomy_description, limit = 200, createLeadsForExisting = false } = body;
+    const { 
+      enumeration_type = 'NPI-1', 
+      state, 
+      city, 
+      last_name, 
+      taxonomy_description, 
+      limit, // Remove default - will be unlimited if not specified
+      createLeadsForExisting = false,
+      fetchAll = true, // Default to fetching all records
+      resumeFromLastPosition = true // Default to resuming from last position
+    } = body;
 
     // NPPES API requires at least one additional criteria besides enumeration_type
     // We'll use a wildcard search on last_name to get all individual providers
     const searchParams: any = {
       enumeration_type,
-      limit: Math.min(limit, 200),
+      limit: 200, // API max per request (keep at 200)
     };
 
     // Add additional criteria - NPPES API requires at least one additional field besides enumeration_type
@@ -39,9 +60,30 @@ export async function POST(request: NextRequest) {
       console.log('Using default taxonomy search: Internal Medicine');
     }
 
+    // Generate search key for tracking progress
+    const searchKey = generateSearchKey(searchParams);
+    
+    // Get last sync position if resuming
+    let startFromSkip = 0;
+    if (resumeFromLastPosition) {
+      const syncProgress = await db.syncProgress.findUnique({
+        where: { searchKey },
+      });
+      if (syncProgress) {
+        startFromSkip = syncProgress.lastFetchedSkip;
+        console.log(`Resuming from position ${startFromSkip} for search key: ${searchKey}`);
+      }
+    }
+
     console.log('Fetching providers with params:', searchParams);
-    const providers = await fetchAllProviders(searchParams, 1200);
-    console.log(`Fetched ${providers.length} providers from NPPES API`);
+    console.log(`Fetch mode: ${fetchAll ? 'UNLIMITED (all records)' : `Limited to ${limit || 'default'}`}`);
+    
+    // Fetch providers (unlimited if fetchAll is true or limit is not specified)
+    const maxRecords = fetchAll ? undefined : (limit || undefined);
+    const fetchResult = await fetchAllProviders(searchParams, maxRecords, startFromSkip);
+    const providers = fetchResult.providers;
+    
+    console.log(`Fetched ${providers.length} providers from NPPES API (Total available: ${fetchResult.totalAvailable}, Last skip: ${fetchResult.lastSkip})`);
 
     if (providers.length === 0) {
       return NextResponse.json({
@@ -214,6 +256,27 @@ export async function POST(request: NextRequest) {
     // Count how many leads were created (each new provider gets 1 lead)
     const leadsCreated = added + leadsCreatedForExisting;
 
+    // Update sync progress
+    await db.syncProgress.upsert({
+      where: { searchKey },
+      create: {
+        searchKey,
+        lastFetchedSkip: fetchResult.lastSkip,
+        totalFetched: fetchResult.lastSkip,
+        totalAvailable: fetchResult.totalAvailable,
+      },
+      update: {
+        lastFetchedSkip: fetchResult.lastSkip,
+        totalFetched: fetchResult.lastSkip,
+        totalAvailable: fetchResult.totalAvailable,
+      },
+    });
+
+    const isComplete = fetchResult.lastSkip >= fetchResult.totalAvailable;
+    const progressMessage = isComplete 
+      ? `✅ Complete! All ${fetchResult.totalAvailable.toLocaleString()} records fetched.`
+      : `📊 Progress: ${fetchResult.lastSkip.toLocaleString()} / ${fetchResult.totalAvailable.toLocaleString()} records fetched (${Math.round((fetchResult.lastSkip / fetchResult.totalAvailable) * 100)}%)`;
+
     return NextResponse.json({
       success: true,
       added,
@@ -222,7 +285,11 @@ export async function POST(request: NextRequest) {
       leadsCreated,
       leadsCreatedForNew: added,
       leadsCreatedForExisting,
-      message: `Synced ${providers.length} providers: ${added} new (${added} leads created), ${updated} updated${leadsCreatedForExisting > 0 ? `, ${leadsCreatedForExisting} leads created for existing providers` : ''}`,
+      totalAvailable: fetchResult.totalAvailable,
+      lastFetchedSkip: fetchResult.lastSkip,
+      isComplete,
+      progressMessage,
+      message: `Synced ${providers.length} providers: ${added} new (${added} leads created), ${updated} updated${leadsCreatedForExisting > 0 ? `, ${leadsCreatedForExisting} leads created for existing providers` : ''}. ${progressMessage}`,
     });
   } catch (error: any) {
     console.error('Sync error:', error);
