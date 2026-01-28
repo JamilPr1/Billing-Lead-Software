@@ -13,13 +13,23 @@ const SPECIALTIES = [
   { label: 'Medical Director', search: 'Medical Director' },
 ];
 
+interface SyncProgress {
+  currentSpecialty: string | null;
+  specialtyProgress: { current: number; total: number };
+  providersFetched: number;
+  providersAdded: number;
+  providersUpdated: number;
+  leadsCreated: number;
+  status: 'fetching' | 'processing' | 'complete';
+}
+
 export default function SyncButton() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(['Internal Medicine']);
   const [showSelector, setShowSelector] = useState(false);
-  const [currentSpecialty, setCurrentSpecialty] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [createLeadsForExisting, setCreateLeadsForExisting] = useState(false);
+  const [progress, setProgress] = useState<SyncProgress | null>(null);
   
   const getSpecialtySearch = (label: string) => {
     const specialty = SPECIALTIES.find(s => s.label === label);
@@ -38,16 +48,30 @@ export default function SyncButton() {
     let totalAdded = 0;
     let totalUpdated = 0;
     let totalProcessed = 0;
+    let totalLeadsCreated = 0;
 
     try {
       // Sync each selected specialty
       const totalSpecialties = selectedSpecialties.length;
       for (let idx = 0; idx < selectedSpecialties.length; idx++) {
         const specialtyLabel = selectedSpecialties[idx];
-        setCurrentSpecialty(specialtyLabel);
-        setProgress({ current: idx + 1, total: totalSpecialties });
+        
+        // Update progress: fetching
+        setProgress({
+          currentSpecialty: specialtyLabel,
+          specialtyProgress: { current: idx + 1, total: totalSpecialties },
+          providersFetched: totalProcessed,
+          providersAdded: totalAdded,
+          providersUpdated: totalUpdated,
+          leadsCreated: totalLeadsCreated,
+          status: 'fetching',
+        });
         
         const specialtySearch = getSpecialtySearch(specialtyLabel);
+        
+        // Update progress: processing
+        setProgress(prev => prev ? { ...prev, status: 'processing' } : null);
+        
         const response = await fetch('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -61,25 +85,42 @@ export default function SyncButton() {
         const data = await response.json();
         
         if (data.success) {
-          totalAdded += data.added || 0;
-          totalUpdated += data.updated || 0;
-          totalProcessed += data.total || 0;
+          const added = data.added || 0;
+          const updated = data.updated || 0;
+          const processed = data.total || 0;
+          const leadsCreated = data.leadsCreated || added; // Each new provider gets 1 lead
+          
+          totalAdded += added;
+          totalUpdated += updated;
+          totalProcessed += processed;
+          totalLeadsCreated += leadsCreated;
+          
+          // Update progress with latest stats
+          setProgress({
+            currentSpecialty: specialtyLabel,
+            specialtyProgress: { current: idx + 1, total: totalSpecialties },
+            providersFetched: totalProcessed,
+            providersAdded: totalAdded,
+            providersUpdated: totalUpdated,
+            leadsCreated: totalLeadsCreated,
+            status: 'complete',
+          });
         } else {
           setMessage(`Error syncing ${specialtyLabel}: ${data.error}`);
         }
       }
       
-      setCurrentSpecialty(null);
       setProgress(null);
 
       if (totalProcessed > 0) {
-        setMessage(`Sync completed! Added: ${totalAdded}, Updated: ${totalUpdated}, Total: ${totalProcessed}`);
-        setTimeout(() => window.location.reload(), 2000);
+        setMessage(`✅ Sync completed! Fetched: ${totalProcessed} providers | Added: ${totalAdded} (${totalLeadsCreated} leads created) | Updated: ${totalUpdated}`);
+        setTimeout(() => window.location.reload(), 3000);
       } else {
-        setMessage('No providers found. Try different specialties.');
+        setMessage('No providers found. Try different specialties or search criteria.');
       }
     } catch (error) {
       setMessage('Failed to sync providers');
+      setProgress(null);
     } finally {
       setLoading(false);
     }
@@ -108,8 +149,8 @@ export default function SyncButton() {
           className="btn btn-primary"
         >
           {loading 
-            ? (currentSpecialty 
-                ? `Syncing ${currentSpecialty}... (${progress?.current}/${progress?.total})` 
+            ? (progress?.currentSpecialty 
+                ? `Syncing ${progress.currentSpecialty}... (${progress.specialtyProgress.current}/${progress.specialtyProgress.total})` 
                 : 'Syncing...')
             : 'Sync Selected Specialties'}
         </button>
@@ -118,6 +159,15 @@ export default function SyncButton() {
             Selected: {selectedSpecialties.join(', ')}
           </div>
         )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={createLeadsForExisting}
+            onChange={(e) => setCreateLeadsForExisting(e.target.checked)}
+            disabled={loading}
+          />
+          <span>Create leads for existing providers</span>
+        </label>
       </div>
       
       {showSelector && (
@@ -162,6 +212,72 @@ export default function SyncButton() {
             >
               Clear All
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Bar */}
+      {progress && (
+        <div className="card" style={{ marginTop: '1rem', padding: '1rem' }}>
+          <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>
+              {progress.status === 'fetching' && '📡 Fetching from NPPES API...'}
+              {progress.status === 'processing' && '⚙️ Processing providers...'}
+              {progress.status === 'complete' && '✅ Processing complete'}
+            </h4>
+            <span style={{ fontSize: '0.75rem', color: '#666' }}>
+              {progress.currentSpecialty} ({progress.specialtyProgress.current}/{progress.specialtyProgress.total})
+            </span>
+          </div>
+          
+          {/* Progress Bar */}
+          <div style={{ 
+            width: '100%', 
+            height: '8px', 
+            background: '#e0e0e0', 
+            borderRadius: '4px', 
+            overflow: 'hidden',
+            marginBottom: '1rem'
+          }}>
+            <div style={{
+              width: `${(progress.specialtyProgress.current / progress.specialtyProgress.total) * 100}%`,
+              height: '100%',
+              background: progress.status === 'complete' ? '#4caf50' : '#1976d2',
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          
+          {/* Statistics */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+            gap: '1rem',
+            fontSize: '0.875rem'
+          }}>
+            <div>
+              <div style={{ color: '#666', marginBottom: '0.25rem' }}>Providers Fetched</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1976d2' }}>
+                {progress.providersFetched.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#666', marginBottom: '0.25rem' }}>New Providers</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#4caf50' }}>
+                {progress.providersAdded.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#666', marginBottom: '0.25rem' }}>Leads Created</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#ff9800' }}>
+                {progress.leadsCreated.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#666', marginBottom: '0.25rem' }}>Providers Updated</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#9e9e9e' }}>
+                {progress.providersUpdated.toLocaleString()}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { enumeration_type = 'NPI-1', state, city, last_name, taxonomy_description, limit = 200 } = body;
+    const { enumeration_type = 'NPI-1', state, city, last_name, taxonomy_description, limit = 200, createLeadsForExisting = false } = body;
 
     // NPPES API requires at least one additional criteria besides enumeration_type
     // We'll use a wildcard search on last_name to get all individual providers
@@ -59,10 +59,11 @@ export async function POST(request: NextRequest) {
     // Fetch all existing providers in one query
     const existingProviders = await db.provider.findMany({
       where: { npi: { in: npis } },
-      select: { npi: true },
+      select: { npi: true, id: true },
     });
     
     const existingNpiSet = new Set(existingProviders.map(p => p.npi));
+    const existingProviderMap = new Map(existingProviders.map(p => [p.npi, p.id]));
     
     // Prepare data for bulk operations
     const providersToCreate: any[] = [];
@@ -174,11 +175,54 @@ export async function POST(request: NextRequest) {
       updated += batch.length;
     }
 
+    // Optionally create leads for existing providers that don't have leads
+    let leadsCreatedForExisting = 0;
+    
+    if (createLeadsForExisting && providersToUpdate.length > 0) {
+      // Get provider IDs that were updated
+      const updatedProviderIds = providersToUpdate
+        .map(({ npi }) => existingProviderMap.get(npi))
+        .filter(Boolean) as string[];
+
+      if (updatedProviderIds.length > 0) {
+        // Check which providers don't have leads
+        const providersWithLeads = await db.lead.findMany({
+          where: { providerId: { in: updatedProviderIds } },
+          select: { providerId: true },
+        });
+        
+        const providersWithLeadsSet = new Set(providersWithLeads.map(l => l.providerId));
+        const providersNeedingLeads = updatedProviderIds.filter(id => !providersWithLeadsSet.has(id));
+
+        // Create leads for providers that don't have them
+        if (providersNeedingLeads.length > 0) {
+          const LEAD_BATCH_SIZE = 100;
+          for (let i = 0; i < providersNeedingLeads.length; i += LEAD_BATCH_SIZE) {
+            const batch = providersNeedingLeads.slice(i, i + LEAD_BATCH_SIZE);
+            await db.lead.createMany({
+              data: batch.map(providerId => ({
+                providerId,
+                status: 'NEW',
+              })),
+            });
+            leadsCreatedForExisting += batch.length;
+          }
+        }
+      }
+    }
+
+    // Count how many leads were created (each new provider gets 1 lead)
+    const leadsCreated = added + leadsCreatedForExisting;
+
     return NextResponse.json({
       success: true,
       added,
       updated,
       total: providers.length,
+      leadsCreated,
+      leadsCreatedForNew: added,
+      leadsCreatedForExisting,
+      message: `Synced ${providers.length} providers: ${added} new (${added} leads created), ${updated} updated${leadsCreatedForExisting > 0 ? `, ${leadsCreatedForExisting} leads created for existing providers` : ''}`,
     });
   } catch (error: any) {
     console.error('Sync error:', error);
