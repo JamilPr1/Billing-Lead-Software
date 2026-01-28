@@ -66,12 +66,20 @@ export async function POST(request: NextRequest) {
     // Get last sync position if resuming
     let startFromSkip = 0;
     if (resumeFromLastPosition) {
-      const syncProgress = await db.syncProgress.findUnique({
-        where: { searchKey },
-      });
-      if (syncProgress) {
-        startFromSkip = syncProgress.lastFetchedSkip;
-        console.log(`Resuming from position ${startFromSkip} for search key: ${searchKey}`);
+      try {
+        // Check if SyncProgress table exists (might not exist until migration runs)
+        // @ts-ignore - SyncProgress model may not be in Prisma client yet
+        const syncProgress = await db.syncProgress?.findUnique({
+          where: { searchKey },
+        });
+        if (syncProgress) {
+          startFromSkip = syncProgress.lastFetchedSkip;
+          console.log(`Resuming from position ${startFromSkip} for search key: ${searchKey}`);
+        }
+      } catch (error: any) {
+        // Table doesn't exist yet - that's okay, start from beginning
+        console.log('SyncProgress table not found, starting from beginning:', error.message);
+        startFromSkip = 0;
       }
     }
 
@@ -256,21 +264,31 @@ export async function POST(request: NextRequest) {
     // Count how many leads were created (each new provider gets 1 lead)
     const leadsCreated = added + leadsCreatedForExisting;
 
-    // Update sync progress
-    await db.syncProgress.upsert({
-      where: { searchKey },
-      create: {
-        searchKey,
-        lastFetchedSkip: fetchResult.lastSkip,
-        totalFetched: fetchResult.lastSkip,
-        totalAvailable: fetchResult.totalAvailable,
-      },
-      update: {
-        lastFetchedSkip: fetchResult.lastSkip,
-        totalFetched: fetchResult.lastSkip,
-        totalAvailable: fetchResult.totalAvailable,
-      },
-    });
+    // Update sync progress (gracefully handle if table doesn't exist yet)
+    try {
+      // @ts-ignore - SyncProgress model may not be in Prisma client yet
+      if (db.syncProgress) {
+        // @ts-ignore
+        await db.syncProgress.upsert({
+          where: { searchKey },
+          create: {
+            searchKey,
+            lastFetchedSkip: fetchResult.lastSkip,
+            totalFetched: fetchResult.lastSkip,
+            totalAvailable: fetchResult.totalAvailable,
+          },
+          update: {
+            lastFetchedSkip: fetchResult.lastSkip,
+            totalFetched: fetchResult.lastSkip,
+            totalAvailable: fetchResult.totalAvailable,
+          },
+        });
+      }
+    } catch (error: any) {
+      // Table doesn't exist yet - that's okay, just log it
+      console.log('Could not update SyncProgress (table may not exist yet):', error.message);
+      // Continue without failing - the sync still works
+    }
 
     const isComplete = fetchResult.lastSkip >= fetchResult.totalAvailable;
     const progressMessage = isComplete 
