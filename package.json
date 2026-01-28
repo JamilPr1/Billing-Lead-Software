@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
+    "db:init": "prisma db push --skip-generate",
     "db:studio": "prisma studio"
   },
   "dependencies": {
