@@ -55,34 +55,74 @@ export async function fetchAllProviders(
 ): Promise<NPPESProvider[]> {
   const allProviders: NPPESProvider[] = [];
   const limit = searchParams.limit || 200;
-  let skip = 0;
-  let hasMore = true;
+  
+  // First request to get total count
+  const firstResponse = await searchNPPES({
+    ...searchParams,
+    limit,
+    skip: 0,
+  });
 
-  while (hasMore && allProviders.length < maxRecords) {
-    const response = await searchNPPES({
-      ...searchParams,
-      limit,
-      skip,
-    });
+  console.log(`NPPES API first response: result_count=${firstResponse.result_count}, results=${firstResponse.results?.length || 0}`);
 
-    console.log(`NPPES API response: result_count=${response.result_count}, results=${response.results?.length || 0}`);
+  if (!firstResponse.results || firstResponse.results.length === 0) {
+    return [];
+  }
 
-    if (response.results && response.results.length > 0) {
-      allProviders.push(...response.results);
-      skip += response.results.length;
+  allProviders.push(...firstResponse.results);
 
-      if (response.results.length < limit) {
-        hasMore = false;
-      }
-    } else {
-      console.log('No more results from NPPES API');
-      hasMore = false;
+  // Calculate how many more requests we need
+  const totalAvailable = firstResponse.result_count || 0;
+  const totalNeeded = Math.min(maxRecords, totalAvailable);
+  const remainingNeeded = totalNeeded - allProviders.length;
+  
+  if (remainingNeeded <= 0) {
+    return allProviders;
+  }
+
+  // Calculate number of parallel requests (limit to 3 concurrent to avoid rate limiting)
+  const numRequests = Math.ceil(remainingNeeded / limit);
+  const maxConcurrent = 3; // Conservative to avoid hitting rate limits
+
+  // Create batches of parallel requests
+  for (let i = 0; i < numRequests; i += maxConcurrent) {
+    const batch: Promise<NPPESResponse>[] = [];
+    for (let j = 0; j < maxConcurrent && (i + j) < numRequests; j++) {
+      const skip = (i + j + 1) * limit;
+      if (skip >= totalNeeded || allProviders.length >= maxRecords) break;
+      
+      batch.push(
+        searchNPPES({
+          ...searchParams,
+          limit,
+          skip,
+        }).catch(error => {
+          console.error(`Error fetching batch at skip ${skip}:`, error);
+          // Return empty response on error to continue processing
+          return { result_count: 0, results: [] } as NPPESResponse;
+        })
+      );
     }
-
-    if (allProviders.length >= maxRecords) {
-      break;
+    
+    if (batch.length === 0) break;
+    
+    // Wait for batch to complete before starting next batch
+    const batchResults = await Promise.all(batch);
+    
+    for (const response of batchResults) {
+      if (response.results && response.results.length > 0) {
+        allProviders.push(...response.results);
+        if (allProviders.length >= maxRecords) {
+          return allProviders.slice(0, maxRecords);
+        }
+      }
+    }
+    
+    // Small delay between batches to be respectful to the API
+    if (i + maxConcurrent < numRequests && allProviders.length < maxRecords) {
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
 
-  return allProviders;
+  return allProviders.slice(0, maxRecords);
 }

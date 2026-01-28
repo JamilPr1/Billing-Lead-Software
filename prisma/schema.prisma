@@ -9,41 +9,45 @@ datasource db {
 }
 
 model Provider {
-  id                String   @id @default(cuid())
-  npi               String   @unique
-  enumerationType   String
-  firstName         String?
-  lastName          String?
-  organizationName  String?
-  primaryAddress    String
-  mailingAddress    String
-  city              String?
-  state             String?
-  postalCode        String?
-  phone             String?
-  email             String?
-  taxonomy          String?
-  rawData           String
-  addedAt           DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  leads             Lead[]
-  
+  id               String   @id @default(cuid())
+  npi              String   @unique
+  enumerationType  String
+  firstName        String?
+  lastName         String?
+  organizationName String?
+  primaryAddress   String
+  mailingAddress   String
+  city             String?
+  state            String?
+  postalCode       String?
+  phone            String?
+  email            String?
+  taxonomy         String?
+  rawData          String
+  addedAt          DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  leads Lead[]
+
   @@index([addedAt])
   @@index([npi])
+  @@index([state, city])
+  @@index([taxonomy])
 }
 
 model Lead {
-  id                String   @id @default(cuid())
-  providerId        String
-  provider          Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  status            String   @default("NEW")
-  notes             String?
-  lastContactedAt   DateTime?
-  lastContactType   String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  id              String    @id @default(cuid())
+  providerId      String
+  provider        Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  status          String    @default("NEW")
+  notes           String?
+  lastContactedAt DateTime?
+  lastContactType String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
   @@index([status])
   @@index([providerId])
+  @@index([providerId, status])
+  @@index([updatedAt])
 }

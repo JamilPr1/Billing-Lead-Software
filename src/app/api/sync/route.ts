@@ -53,89 +53,125 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    let added = 0;
-    let updated = 0;
-
-    for (const provider of providers) {
-      const npi = provider.number;
-      const primaryAddress = provider.addresses?.[0] || {};
-      const mailingAddress = provider.addresses?.[1] || {};
-      const taxonomy = provider.taxonomies?.find(t => t.primary)?.desc || 
-                      provider.taxonomies?.[0]?.desc || '';
-
-      // Extract phone numbers from all addresses (primary, mailing, practice locations)
-      let phone = primaryAddress.telephone_number || null;
-      if (!phone && mailingAddress.telephone_number) {
-        phone = mailingAddress.telephone_number;
-      }
+    // Extract all NPIs upfront
+    const npis = providers.map(p => p.number);
+    
+    // Fetch all existing providers in one query
+    const existingProviders = await db.provider.findMany({
+      where: { npi: { in: npis } },
+      select: { npi: true },
+    });
+    
+    const existingNpiSet = new Set(existingProviders.map(p => p.npi));
+    
+    // Prepare data for bulk operations
+    const providersToCreate: any[] = [];
+    const providersToUpdate: Array<{ npi: string; data: any }> = [];
+    
+    // Process providers in batches
+    const BATCH_SIZE = 100;
+    
+    for (let i = 0; i < providers.length; i += BATCH_SIZE) {
+      const batch = providers.slice(i, i + BATCH_SIZE);
       
-      // Check practice locations for additional phone numbers
-      if (!phone && provider.practiceLocations && Array.isArray(provider.practiceLocations)) {
-        for (const location of provider.practiceLocations) {
-          if (location.telephone_number) {
-            phone = location.telephone_number;
-            break;
+      for (const provider of batch) {
+        const npi = provider.number;
+        const primaryAddress = provider.addresses?.[0] || {};
+        const mailingAddress = provider.addresses?.[1] || {};
+        const taxonomy = provider.taxonomies?.find(t => t.primary)?.desc || 
+                        provider.taxonomies?.[0]?.desc || '';
+
+        // Extract phone numbers from all addresses (primary, mailing, practice locations)
+        let phone = primaryAddress.telephone_number || null;
+        if (!phone && mailingAddress.telephone_number) {
+          phone = mailingAddress.telephone_number;
+        }
+        
+        // Check practice locations for additional phone numbers
+        if (!phone && provider.practiceLocations && Array.isArray(provider.practiceLocations)) {
+          for (const location of provider.practiceLocations) {
+            if (location.telephone_number) {
+              phone = location.telephone_number;
+              break;
+            }
           }
         }
-      }
 
-      // Extract email from endpoints if available
-      let email = null;
-      if (provider.endpoints && Array.isArray(provider.endpoints)) {
-        for (const endpoint of provider.endpoints) {
-          const endpointValue = endpoint.endpoint || endpoint.endpointLocation || '';
-          if (endpointValue && endpointValue.includes('@')) {
-            email = endpointValue;
-            break;
-          }
-          // Also check endpointType
-          if (endpoint.endpointType === 'EMAIL' || endpoint.endpointType === 'DIRECT') {
-            email = endpointValue || null;
-            if (email) break;
+        // Extract email from endpoints if available
+        let email = null;
+        if (provider.endpoints && Array.isArray(provider.endpoints)) {
+          for (const endpoint of provider.endpoints) {
+            const endpointValue = endpoint.endpoint || endpoint.endpointLocation || '';
+            if (endpointValue && endpointValue.includes('@')) {
+              email = endpointValue;
+              break;
+            }
+            // Also check endpointType
+            if (endpoint.endpointType === 'EMAIL' || endpoint.endpointType === 'DIRECT') {
+              email = endpointValue || null;
+              if (email) break;
+            }
           }
         }
-      }
 
-      const providerData = {
-        npi,
-        enumerationType: provider.enumeration_type,
-        firstName: provider.basic?.first_name || null,
-        lastName: provider.basic?.last_name || null,
-        organizationName: provider.basic?.organization_name || null,
-        primaryAddress: JSON.stringify(primaryAddress),
-        mailingAddress: JSON.stringify(mailingAddress),
-        city: primaryAddress.city || null,
-        state: primaryAddress.state || null,
-        postalCode: primaryAddress.postal_code || null,
-        phone: phone,
-        email: email,
-        taxonomy: taxonomy || null,
-        rawData: JSON.stringify(provider),
-      };
+        const providerData = {
+          npi,
+          enumerationType: provider.enumeration_type,
+          firstName: provider.basic?.first_name || null,
+          lastName: provider.basic?.last_name || null,
+          organizationName: provider.basic?.organization_name || null,
+          primaryAddress: JSON.stringify(primaryAddress),
+          mailingAddress: JSON.stringify(mailingAddress),
+          city: primaryAddress.city || null,
+          state: primaryAddress.state || null,
+          postalCode: primaryAddress.postal_code || null,
+          phone: phone,
+          email: email,
+          taxonomy: taxonomy || null,
+          rawData: JSON.stringify(provider),
+        };
 
-      const existing = await db.provider.findUnique({
-        where: { npi },
-      });
-
-      if (existing) {
-        await db.provider.update({
-          where: { npi },
-          data: providerData,
-        });
-        updated++;
-      } else {
-        await db.provider.create({
-          data: {
+        if (existingNpiSet.has(npi)) {
+          providersToUpdate.push({ npi, data: providerData });
+        } else {
+          providersToCreate.push({
             ...providerData,
             leads: {
               create: {
                 status: 'NEW',
               },
             },
-          },
-        });
-        added++;
+          });
+        }
       }
+    }
+
+    // Perform bulk operations
+    let added = 0;
+    let updated = 0;
+
+    // Bulk create new providers (in batches to avoid query size limits)
+    const CREATE_BATCH_SIZE = 50;
+    for (let i = 0; i < providersToCreate.length; i += CREATE_BATCH_SIZE) {
+      const batch = providersToCreate.slice(i, i + CREATE_BATCH_SIZE);
+      await db.$transaction(
+        batch.map(providerData => 
+          db.provider.create({ data: providerData })
+        )
+      );
+      added += batch.length;
+    }
+
+    // Bulk update existing providers (in batches)
+    const UPDATE_BATCH_SIZE = 50;
+    for (let i = 0; i < providersToUpdate.length; i += UPDATE_BATCH_SIZE) {
+      const batch = providersToUpdate.slice(i, i + UPDATE_BATCH_SIZE);
+      await db.$transaction(
+        batch.map(({ npi, data }) =>
+          db.provider.update({ where: { npi }, data })
+        )
+      );
+      updated += batch.length;
     }
 
     return NextResponse.json({

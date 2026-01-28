@@ -18,6 +18,8 @@ export default function SyncButton() {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(['Internal Medicine']);
   const [showSelector, setShowSelector] = useState(false);
+  const [currentSpecialty, setCurrentSpecialty] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   
   const getSpecialtySearch = (label: string) => {
     const specialty = SPECIALTIES.find(s => s.label === label);
@@ -39,7 +41,12 @@ export default function SyncButton() {
 
     try {
       // Sync each selected specialty
-      for (const specialtyLabel of selectedSpecialties) {
+      const totalSpecialties = selectedSpecialties.length;
+      for (let idx = 0; idx < selectedSpecialties.length; idx++) {
+        const specialtyLabel = selectedSpecialties[idx];
+        setCurrentSpecialty(specialtyLabel);
+        setProgress({ current: idx + 1, total: totalSpecialties });
+        
         const specialtySearch = getSpecialtySearch(specialtyLabel);
         const response = await fetch('/api/sync', {
           method: 'POST',
@@ -61,6 +68,9 @@ export default function SyncButton() {
           setMessage(`Error syncing ${specialtyLabel}: ${data.error}`);
         }
       }
+      
+      setCurrentSpecialty(null);
+      setProgress(null);
 
       if (totalProcessed > 0) {
         setMessage(`Sync completed! Added: ${totalAdded}, Updated: ${totalUpdated}, Total: ${totalProcessed}`);
@@ -97,7 +107,11 @@ export default function SyncButton() {
           disabled={loading || selectedSpecialties.length === 0}
           className="btn btn-primary"
         >
-          {loading ? 'Syncing...' : 'Sync Selected Specialties'}
+          {loading 
+            ? (currentSpecialty 
+                ? `Syncing ${currentSpecialty}... (${progress?.current}/${progress?.total})` 
+                : 'Syncing...')
+            : 'Sync Selected Specialties'}
         </button>
         {selectedSpecialties.length > 0 && (
           <div style={{ fontSize: '0.875rem', color: '#666' }}>
