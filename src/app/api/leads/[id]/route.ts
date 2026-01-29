@@ -8,11 +8,25 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const providerId = params.id;
     const body = await request.json();
-    const { status, notes, contactType } = body;
+    const {
+      status,
+      notes,
+      contactType,
+      firstName,
+      lastName,
+      organizationName,
+      city,
+      state,
+      postalCode,
+      phone,
+      email,
+      taxonomy,
+    } = body;
 
     const provider = await db.provider.findUnique({
-      where: { id: params.id },
+      where: { id: providerId },
       include: { leads: true },
     });
 
@@ -23,36 +37,52 @@ export async function PATCH(
       );
     }
 
+    const providerUpdates: Record<string, unknown> = {};
+    if (firstName !== undefined) providerUpdates.firstName = firstName === '' ? null : firstName;
+    if (lastName !== undefined) providerUpdates.lastName = lastName === '' ? null : lastName;
+    if (organizationName !== undefined) providerUpdates.organizationName = organizationName === '' ? null : organizationName;
+    if (city !== undefined) providerUpdates.city = city === '' ? null : city;
+    if (state !== undefined) providerUpdates.state = state === '' ? null : state;
+    if (postalCode !== undefined) providerUpdates.postalCode = postalCode === '' ? null : postalCode;
+    if (phone !== undefined) providerUpdates.phone = phone === '' ? null : phone;
+    if (email !== undefined) providerUpdates.email = email === '' ? null : email;
+    if (taxonomy !== undefined) providerUpdates.taxonomy = taxonomy === '' ? null : taxonomy;
+
+    if (Object.keys(providerUpdates).length > 0) {
+      await db.provider.update({
+        where: { id: providerId },
+        data: providerUpdates,
+      });
+    }
+
     let lead = provider.leads[0];
-    
+
     if (!lead) {
       lead = await db.lead.create({
         data: {
-          providerId: params.id,
-          status: status || 'NEW',
-          notes: notes || null,
+          providerId,
+          status: status ?? 'NEW',
+          notes: notes ?? null,
           lastContactedAt: contactType ? new Date() : null,
-          lastContactType: contactType || null,
+          lastContactType: contactType ?? null,
         },
       });
     } else {
       lead = await db.lead.update({
         where: { id: lead.id },
         data: {
-          status: status || lead.status,
+          status: status ?? lead.status,
           notes: notes !== undefined ? notes : lead.notes,
           lastContactedAt: contactType ? new Date() : lead.lastContactedAt,
-          lastContactType: contactType || lead.lastContactType,
+          lastContactType: contactType ?? lead.lastContactType,
         },
       });
     }
 
     return NextResponse.json({ success: true, lead });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating lead:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to update lead' },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : 'Failed to update lead';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

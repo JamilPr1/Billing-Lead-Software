@@ -21,24 +21,23 @@ export default function Home() {
           <div
             className="card"
             style={{
-              display: 'flex',
-              gap: '1rem',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '1.5rem',
+              alignItems: 'start',
               padding: '1rem',
             }}
           >
-            <div style={{ minWidth: 320, flex: '1 1 520px' }}>
+            <div>
               <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Sync from NPPES</div>
               <SyncButton />
             </div>
 
-            <div style={{ minWidth: 260, flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ fontWeight: 600 }}>Import / Saved</div>
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
                 <FileUpload />
-                <Link href="/leads" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+                <Link href="/leads" className="btn btn-secondary" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
                   View Saved Leads
                 </Link>
               </div>
