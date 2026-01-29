@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   try {
     const providerId = params.id;
     const body = await request.json();

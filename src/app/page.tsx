@@ -1,19 +1,22 @@
 'use client';
 
-import Link from 'next/link';
 import ProviderList from '@/components/ProviderList';
 import SyncButton from '@/components/SyncButton';
 import FileUpload from '@/components/FileUpload';
+import AppNav from '@/components/AppNav';
 
 export default function Home() {
   return (
     <div>
       <header className="header">
-        <div className="container">
-          <h1>Billing Lead Software</h1>
-          <p style={{ marginTop: '0.5rem', color: '#666' }}>
-            NPPES Provider Management & Cold Calling System
-          </p>
+        <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1>Billing Lead Software</h1>
+            <p style={{ marginTop: '0.5rem', color: '#666' }}>
+              NPPES Provider Management & Cold Calling System
+            </p>
+          </div>
+          <AppNav currentPage="home" />
         </div>
       </header>
       <main className="container">
@@ -37,9 +40,6 @@ export default function Home() {
               <div style={{ fontWeight: 600 }}>Import / Saved</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
                 <FileUpload />
-                <Link href="/leads" className="btn btn-secondary" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                  View Saved Leads
-                </Link>
               </div>
               <div style={{ fontSize: '0.75rem', color: '#666', maxWidth: 520 }}>
                 Note: Very large uploads may not work on serverless hosting. For production, use chunked uploads + storage (S3/Supabase) and import in a background job.

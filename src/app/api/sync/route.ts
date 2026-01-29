@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { fetchAllProviders } from '@/lib/nppes-api';
+import { requireAdmin } from '@/lib/auth-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,8 @@ function generateSearchKey(searchParams: any): string {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
   try {
     const body = await request.json();
     const { 

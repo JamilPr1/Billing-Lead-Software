@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import LeadStatusBadge from '@/components/LeadStatusBadge';
 import LeadListItem from '@/components/LeadListItem';
+import AppNav from '@/components/AppNav';
 
 interface Lead {
   id: string;
@@ -31,6 +33,8 @@ interface Lead {
 }
 
 export default function LeadsPage() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'ADMIN';
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -111,11 +115,14 @@ export default function LeadsPage() {
   return (
     <div>
       <header className="header">
-        <div className="container">
-          <h1>Saved Leads</h1>
-          <p style={{ marginTop: '0.5rem', color: '#666' }}>
-            View and manage all saved leads
-          </p>
+        <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1>Saved Leads</h1>
+            <p style={{ marginTop: '0.5rem', color: '#666' }}>
+              View and manage all saved leads
+            </p>
+          </div>
+          <AppNav currentPage="leads" />
         </div>
       </header>
       <main className="container">
@@ -124,9 +131,11 @@ export default function LeadsPage() {
             <h2>Leads ({total})</h2>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-              Back to Providers
-            </Link>
+            {isAdmin && (
+              <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+                Back to Providers
+              </Link>
+            )}
             <select
               value={statusFilter}
               onChange={(e) => {
