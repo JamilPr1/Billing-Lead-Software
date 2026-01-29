@@ -13,43 +13,45 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 min (Vercel hobby plan max)
 
-interface ProviderRow {
-  npi?: string;
-  enumeration_type?: string;
-  first_name?: string;
-  last_name?: string;
-  organization_name?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  phone?: string;
-  email?: string;
-  taxonomy?: string;
-  [key: string]: any; // Allow other fields
+// We only use: NPI, first name, last name, organization name. All other columns are skipped.
+interface RequiredProviderRow {
+  npi: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  organization_name?: string | null;
 }
 
-function normalizeHeader(header: string): string {
-  return header
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/npi_number|national_provider_identifier/i, 'npi')
-    .replace(/firstname|first_name/i, 'first_name')
-    .replace(/lastname|last_name/i, 'last_name')
-    .replace(/org_name|organization/i, 'organization_name')
-    .replace(/postal|zip_code|zipcode/i, 'postal_code')
-    .replace(/specialty|taxonomy_desc/i, 'taxonomy');
+// Map raw column names (case-insensitive, flexible) to our required keys
+const NPI_ALIASES = /^(npi|npi_number|national_provider_identifier|provider_npi|npi\s*#?)$/i;
+const FIRST_NAME_ALIASES = /^(first_name|firstname|first\s*name|fname|given_name|givenname)$/i;
+const LAST_NAME_ALIASES = /^(last_name|lastname|last\s*name|lname|family_name|surname)$/i;
+const ORG_NAME_ALIASES = /^(organization_name|organization|org_name|org|organization\s*name|practice_name|business_name)$/i;
+
+function mapHeaderToKey(header: string): 'npi' | 'first_name' | 'last_name' | 'organization_name' | null {
+  const trimmed = header.trim().replace(/\s+/g, '_');
+  if (NPI_ALIASES.test(trimmed)) return 'npi';
+  if (FIRST_NAME_ALIASES.test(trimmed)) return 'first_name';
+  if (LAST_NAME_ALIASES.test(trimmed)) return 'last_name';
+  if (ORG_NAME_ALIASES.test(trimmed)) return 'organization_name';
+  return null;
 }
 
-function normalizeRowKeys(row: Record<string, any>): ProviderRow {
-  const normalized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(row)) {
-    normalized[normalizeHeader(key)] = value;
+function extractRequiredFieldsOnly(row: Record<string, any>): RequiredProviderRow | null {
+  const out: RequiredProviderRow = { npi: '' };
+  for (const [rawKey, value] of Object.entries(row)) {
+    const key = mapHeaderToKey(rawKey);
+    if (!key) continue;
+    const str = value != null ? String(value).trim() : '';
+    if (key === 'npi') out.npi = str;
+    else if (key === 'first_name') out.first_name = str || null;
+    else if (key === 'last_name') out.last_name = str || null;
+    else if (key === 'organization_name') out.organization_name = str || null;
   }
-  return normalized as ProviderRow;
+  if (!out.npi) return null;
+  return out;
 }
 
-async function upsertProvidersFromRows(rows: ProviderRow[]) {
+async function upsertProvidersFromRows(rows: RequiredProviderRow[]) {
   let totalProcessed = 0;
   let added = 0;
   let updated = 0;
@@ -58,10 +60,7 @@ async function upsertProvidersFromRows(rows: ProviderRow[]) {
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
 
-    const npis = batch
-      .map((row) => row.npi?.toString().trim())
-      .filter(Boolean) as string[];
-
+    const npis = batch.map((row) => row.npi).filter(Boolean);
     if (npis.length === 0) continue;
 
     const existingProviders = await db.provider.findMany({
@@ -75,28 +74,25 @@ async function upsertProvidersFromRows(rows: ProviderRow[]) {
     const providersToUpdate: Array<{ npi: string; data: any }> = [];
 
     for (const row of batch) {
-      const npi = row.npi?.toString().trim();
+      const npi = row.npi.trim();
       if (!npi) continue;
 
+      // Only required fields: NPI, first name, last name, organization name. Rest are empty.
       const providerData: any = {
         npi,
-        enumerationType: row.enumeration_type || 'NPI-1',
-        firstName: row.first_name?.toString().trim() || null,
-        lastName: row.last_name?.toString().trim() || null,
-        organizationName: row.organization_name?.toString().trim() || null,
-        city: row.city?.toString().trim() || null,
-        state: row.state?.toString().trim() || null,
-        postalCode: row.postal_code?.toString().trim() || null,
-        phone: row.phone?.toString().trim() || null,
-        email: row.email?.toString().trim() || null,
-        taxonomy: row.taxonomy?.toString().trim() || null,
-        primaryAddress: JSON.stringify({
-          city: row.city,
-          state: row.state,
-          postal_code: row.postal_code,
-        }),
+        enumerationType: 'NPI-1',
+        firstName: row.first_name || null,
+        lastName: row.last_name || null,
+        organizationName: row.organization_name || null,
+        city: null,
+        state: null,
+        postalCode: null,
+        phone: null,
+        email: null,
+        taxonomy: null,
+        primaryAddress: JSON.stringify({}),
         mailingAddress: JSON.stringify({}),
-        rawData: JSON.stringify(row),
+        rawData: JSON.stringify({ npi: row.npi, first_name: row.first_name, last_name: row.last_name, organization_name: row.organization_name }),
       };
 
       if (existingNpiSet.has(npi)) {
@@ -196,8 +192,10 @@ export async function POST(request: NextRequest) {
             errors.push(`File ${entry.entryName}: ${parseResult.errors.map((e) => e.message).join(', ')}`);
           }
 
-          const rows = parseResult.data.map((r) => normalizeRowKeys(r));
-          console.log(`Processing ${rows.length} rows from ${entry.entryName}`);
+          const rows = parseResult.data
+            .map((r) => extractRequiredFieldsOnly(r))
+            .filter((r): r is RequiredProviderRow => r != null);
+          console.log(`Processing ${rows.length} rows from ${entry.entryName} (NPI + name only)`);
 
           const res = await upsertProvidersFromRows(rows);
           totalProcessed += res.totalProcessed;
@@ -219,8 +217,10 @@ export async function POST(request: NextRequest) {
         errors.push(`File ${file.name}: ${parseResult.errors.map((e) => e.message).join(', ')}`);
       }
 
-      const rows = parseResult.data.map((r) => normalizeRowKeys(r));
-      console.log(`Processing ${rows.length} rows from ${file.name}`);
+      const rows = parseResult.data
+        .map((r) => extractRequiredFieldsOnly(r))
+        .filter((r): r is RequiredProviderRow => r != null);
+      console.log(`Processing ${rows.length} rows from ${file.name} (NPI + name only)`);
 
       const res = await upsertProvidersFromRows(rows);
       totalProcessed += res.totalProcessed;
@@ -236,9 +236,11 @@ export async function POST(request: NextRequest) {
 
       const sheet = workbook.Sheets[firstSheetName];
       const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
-      const rows = rawRows.map((r) => normalizeRowKeys(r));
+      const rows = rawRows
+        .map((r) => extractRequiredFieldsOnly(r))
+        .filter((r): r is RequiredProviderRow => r != null);
 
-      console.log(`Processing ${rows.length} rows from ${file.name} (sheet: ${firstSheetName})`);
+      console.log(`Processing ${rows.length} rows from ${file.name} (sheet: ${firstSheetName}, NPI + name only)`);
 
       const res = await upsertProvidersFromRows(rows);
       totalProcessed += res.totalProcessed;

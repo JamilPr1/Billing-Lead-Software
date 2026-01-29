@@ -38,7 +38,28 @@ export default function FileUpload() {
         body: formData,
       });
 
-      const data = await response.json();
+      // Handle 413 (Request Entity Too Large) - live server rejects body before our API
+      if (response.status === 413) {
+        setMessage('File too large for the server. On live hosting, try files under 4MB or run the app locally for large uploads.');
+        event.target.value = '';
+        setUploading(false);
+        setProgress(0);
+        return;
+      }
+
+      const text = await response.text();
+      let data: any;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        setMessage(response.status === 413
+          ? 'File too large for the server. Try a smaller file or run locally for large uploads.'
+          : `Upload failed (${response.status}). Try a smaller file or run the app locally.`);
+        event.target.value = '';
+        setUploading(false);
+        setProgress(0);
+        return;
+      }
 
       if (data.success) {
         setMessage(
@@ -47,7 +68,6 @@ export default function FileUpload() {
         if (data.errors && data.errors.length > 0) {
           console.warn('Import errors:', data.errors);
         }
-        // Reload page after 2 seconds to show new data
         setTimeout(() => window.location.reload(), 2000);
       } else {
         setMessage(`Error: ${data.error || 'Failed to upload file'}`);
@@ -85,7 +105,7 @@ export default function FileUpload() {
           style={{ display: 'none' }}
         />
         <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
-          Upload an Excel/CSV file (or a ZIP containing CSV files) with provider data
+          Excel/CSV or ZIP. We use NPI, first name, last name (and org name) only. On live, keep files under 4MB.
         </div>
       </div>
 
