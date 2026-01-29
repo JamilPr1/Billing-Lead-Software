@@ -19,7 +19,7 @@ interface Lead {
     organizationName: string | null;
     city: string | null;
     state: string | null;
-    postalCode: string | null;
+    postalCode?: string | null;
     phone: string | null;
     email: string | null;
     taxonomy: string | null;
