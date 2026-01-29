@@ -11,7 +11,7 @@ declare module 'papaparse' {
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export const maxDuration = 900; // 15 minutes for large file processing
+export const maxDuration = 300; // 5 min (Vercel hobby plan max)
 
 interface ProviderRow {
   npi?: string;
