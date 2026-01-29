@@ -12,17 +12,18 @@ export default function FileUpload() {
     if (!file) return;
 
     // Validate file type
-    if (!file.name.endsWith('.zip')) {
-      setMessage('Error: Only ZIP files are supported');
+    const lowerName = file.name.toLowerCase();
+    const isZip = lowerName.endsWith('.zip');
+    const isCsv = lowerName.endsWith('.csv');
+    const isXlsx = lowerName.endsWith('.xlsx');
+    const isXls = lowerName.endsWith('.xls');
+
+    if (!isZip && !isCsv && !isXlsx && !isXls) {
+      setMessage('Error: Supported formats are .xlsx, .xls, .csv, .zip');
       return;
     }
 
-    // Validate file size (100MB max)
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    if (file.size > maxSize) {
-      setMessage('Error: File size exceeds 100MB limit');
-      return;
-    }
+    // No explicit file-size limit enforced here.
 
     setUploading(true);
     setMessage(null);
@@ -78,13 +79,13 @@ export default function FileUpload() {
         <input
           id="file-upload"
           type="file"
-          accept=".zip"
+          accept=".xlsx,.xls,.csv,.zip"
           onChange={handleFileChange}
           disabled={uploading}
           style={{ display: 'none' }}
         />
         <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
-          Upload a ZIP file containing CSV files with provider data (max 100MB)
+          Upload an Excel/CSV file (or a ZIP containing CSV files) with provider data
         </div>
       </div>
 

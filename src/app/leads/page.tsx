@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import LeadStatusBadge from '@/components/LeadStatusBadge';
+import LeadListItem from '@/components/LeadListItem';
 
 interface Lead {
   id: string;
@@ -171,63 +172,18 @@ export default function LeadsPage() {
                     <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.875rem' }}>Status</th>
                     <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.875rem' }}>Last Contacted</th>
                     <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.875rem' }}>Saved</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600, fontSize: '0.875rem' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((lead, index) => {
-                    const provider = lead.provider;
-                    const name = provider.firstName && provider.lastName
-                      ? `${provider.firstName} ${provider.lastName}`
-                      : provider.organizationName || 'N/A';
-                    const location = [provider.city, provider.state].filter(Boolean).join(', ') || 'N/A';
-                    
-                    return (
-                      <tr
-                        key={lead.id}
-                        style={{
-                          background: index % 2 === 0 ? '#fff' : '#f8f9fa',
-                          borderBottom: '1px solid #dee2e6',
-                        }}
-                      >
-                        <td style={{ padding: '0.75rem' }}>{name}</td>
-                        <td style={{ padding: '0.75rem' }}>{provider.npi}</td>
-                        <td style={{ padding: '0.75rem' }}>{provider.taxonomy || 'N/A'}</td>
-                        <td style={{ padding: '0.75rem' }}>{location}</td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            {provider.phone && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <span>📞</span>
-                                <a href={`tel:${provider.phone}`} style={{ color: '#1976d2', textDecoration: 'none' }}>
-                                  {provider.phone}
-                                </a>
-                              </div>
-                            )}
-                            {provider.email && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <span>✉️</span>
-                                <a href={`mailto:${provider.email}`} style={{ color: '#1976d2', textDecoration: 'none' }}>
-                                  {provider.email}
-                                </a>
-                              </div>
-                            )}
-                            {!provider.phone && !provider.email && <span>N/A</span>}
-                          </div>
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <LeadStatusBadge status={lead.status} />
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          {lead.lastContactedAt
-                            ? format(new Date(lead.lastContactedAt), 'MMM dd, yyyy')
-                            : 'Never'}
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          {format(new Date(lead.createdAt), 'MMM dd, yyyy')}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {leads.map((lead, index) => (
+                    <LeadListItem
+                      key={lead.id}
+                      lead={lead}
+                      isEven={index % 2 === 0}
+                      onUpdate={() => fetchLeads(page, statusFilter)}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
